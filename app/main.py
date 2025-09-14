@@ -1,22 +1,35 @@
-
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import io
-from .model import predict
+import base64
+import os
+from dotenv import load_dotenv
+from huggingface_hub import InferenceClient
 
+# Load environment variables
+load_dotenv()
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
+HF_MODEL = os.getenv("HF_MODEL")
 
-app = FastAPI(title="Breast Cancer Classifier", description="Upload histopathology image for prediction")
+# Initialize FastAPI app
+app = FastAPI(
+    title="Breast Cancer Classifier",
+    description="Upload histopathology image for prediction"
+)
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Or specify ["http://localhost:5173"] for more security
+    allow_origins=["*"],  # Change to ["http://localhost:5173"] for frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize Hugging Face client
+client = InferenceClient(token=HF_API_TOKEN)
 
 @app.get("/")
 def home():
@@ -54,12 +67,22 @@ def home():
 @app.post("/predict")
 async def classify_image(file: UploadFile = File(...)):
     try:
-        # Read image
+        # Read and convert image
         contents = await file.read()
         image = Image.open(io.BytesIO(contents)).convert("RGB")
         
-        # Predict
-        result = predict(image, class_names=["benign", "malignant"])
+        # Convert image to base64 string
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        
+        # Send request to Hugging Face Hosted API
+        result = client.post(
+            HF_MODEL,
+            {"image": img_str}
+        )
+        
         return JSONResponse({"prediction": result})
+    
     except Exception as e:
         return JSONResponse({"error": str(e)})
