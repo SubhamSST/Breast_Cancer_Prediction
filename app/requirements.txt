@@ -4,3 +4,5 @@ torch
 torchvision
 Pillow
 python-multipart
+python-dotenv
+huggingface_hub
